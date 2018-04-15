@@ -4004,9 +4004,9 @@ and jsx_mk_props cx reason c name attributes children = Ast.JSX.(
     (* <element {...spread} /> *)
     | Opening.SpreadAttribute (_, { SpreadAttribute.argument }) ->
         let spread = expression cx argument in
-        let obj = eval_props (map, result) in
+        let obj = eval_props (SMap.empty, result) in
         let result = mk_spread spread obj in
-        false, SMap.empty, Some result
+        false, map, Some result
   ) (true, SMap.empty, None) attributes in
 
   let map =
