@@ -3943,26 +3943,23 @@ and jsx_mk_props cx reason c name attributes children = Ast.JSX.(
         ObjAssignToT (reason_props, from_obj, t, default_obj_assign_kind));
     )
   in
-  (* When there's no result, return a new object with specified sealing. When
-     there's result, copy a new object into it, sealing the result when
-     necessary.
-
-     When building an object incrementally, only the final call to this function
-     may be with sealed=true, so we will always have an unsealed object to copy
-     properties to. *)
-  let eval_props ?(sealed=false) (map, result) =
+  let empty_object = 
+    Obj_type.mk_with_proto cx reason_props proto
+  in
+  (* Merge field map with object result of spread attributes if any
+     and optionally seal the type *)
+  let merge_props ?(sealed=false) map result =
     match result with
     | None -> mk_object ~sealed map
     | Some result ->
       let result =
-        if not (SMap.is_empty map)
-        then mk_spread (mk_object map) result
-        else result
+        if SMap.is_empty map
+        then result
+        else mk_spread (mk_object map) result
       in
-      if not sealed then result else
-        Tvar.mk_where cx reason_props (fun t ->
-          Flow.flow cx (result, ObjSealT (reason_props, t))
-        )
+      Tvar.mk_where cx reason_props (fun t ->
+        Flow.flow cx (result, ObjSealT (reason_props, t))
+      )
   in
 
   let sealed, map, result = List.fold_left (fun (sealed, map, result) att ->
@@ -4004,7 +4001,9 @@ and jsx_mk_props cx reason c name attributes children = Ast.JSX.(
     (* <element {...spread} /> *)
     | Opening.SpreadAttribute (_, { SpreadAttribute.argument }) ->
         let spread = expression cx argument in
-        let obj = eval_props (SMap.empty, result) in
+        let obj = match result with
+        | Some(obj) -> obj
+        | None -> empty_object in
         let result = mk_spread spread obj in
         false, map, Some result
   ) (true, SMap.empty, None) attributes in
@@ -4027,7 +4026,7 @@ and jsx_mk_props cx reason c name attributes children = Ast.JSX.(
         let p = Field (None, arr, Neutral) in
         SMap.add "children" p map
   in
-  eval_props ~sealed (map, result)
+  merge_props ~sealed map result
 )
 
 and jsx_desugar cx name component_t props attributes children locs =
